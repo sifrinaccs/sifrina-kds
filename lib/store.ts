@@ -58,6 +58,7 @@ export const upsertOrder = (orderData: Partial<Order> & { id: string }): Order =
   const newOrder: Order = {
     id: orderData.id,
     customerName: orderData.customerName || 'Cliente WhatsApp',
+    phone: orderData.phone || '',
     status: orderData.status || 'standby',
     toppings: orderData.toppings || ['Reina Pepiada', 'Chuleta glaseada con papelón'],
     beverage: orderData.beverage || 'Malta Polar 355ml',

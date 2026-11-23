@@ -61,21 +61,35 @@ export default function IndustrialKDS() {
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const markAsDispatched = async (orderId: string) => {
+  const markAsDispatched = async (order: Order) => {
     try {
+      // 1. Mueve la orden a Columna 4 en Vercel
       await fetch("/api/orders", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-sifrina-secret": "SifrinaKDSSecure2026",
         },
-        body: JSON.stringify({ id: orderId, status: "dispatched" }),
+        body: JSON.stringify({ id: order.id, status: "dispatched" }),
       });
+
+      // 2. Le avisa a n8n para que mande el WhatsApp al cliente
+      await fetch("https://devsifrinaccs.app.n8n.cloud/webhook/kds-despachado", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          id: order.id,
+          phone: order.phone,
+          customerName: order.customerName,
+        }),
+      });
+
+      // 3. Actualiza el estado visual en el televisor
       setOrders((prev) =>
-        prev.map((o) => (o.id === orderId ? { ...o, status: "dispatched" } : o))
+        prev.map((o) => (o.id === order.id ? { ...o, status: "dispatched" } : o))
       );
     } catch (err) {
-      console.error(err);
+      console.error("Error al despachar orden:", err);
     }
   };
 
@@ -221,7 +235,7 @@ export default function IndustrialKDS() {
 
                   {/* BOTON DE ACCION PARA EL COCINERO */}
                   <button
-                    onClick={() => markAsDispatched(order.id)}
+                    onClick={() => markAsDispatched(order)}
                     className="w-full mt-2 bg-emerald-600 hover:bg-emerald-500 text-black font-black py-1.5 rounded text-xs uppercase tracking-wider transition active:scale-95 cursor-pointer"
                   >
                     [ EMPACADO / LISTO ]

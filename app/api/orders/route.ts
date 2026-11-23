@@ -98,6 +98,7 @@ export async function POST(request: NextRequest) {
     const orderToSave: Partial<Order> & { id: string } = {
       id: body.id,
       customerName: body.customerName,
+      phone: body.phone,
       status,
       toppings: Array.isArray(body.toppings) ? body.toppings : undefined,
       beverage: body.beverage,

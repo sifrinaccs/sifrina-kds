@@ -17,6 +17,7 @@ export const SIFRINA_BASE_RECIPE =
 export interface Order {
   id: string; // ej. "#SIF-7291"
   customerName: string;
+  phone?: string; // Número de WhatsApp del cliente para n8n
   status: OrderStatus;
   toppings: string[]; // Setbox: únicamente Reina Pepiada, Chuleta glaseada con papelón, Carne mechada, Pepinillos agridulces
   beverage: string; // Malta Polar o Pepsi (lata 355ml o botella 1.5L)
