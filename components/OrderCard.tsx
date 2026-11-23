@@ -1,7 +1,7 @@
 'use client';
 
 import React from 'react';
-import { Order } from '@/types/order';
+import { Order, SIFRINA_BASE_RECIPE } from '@/types/order';
 import { LiveTimer } from './LiveTimer';
 
 interface OrderCardProps {
@@ -20,7 +20,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
   const isPaymentPending = order.status === 'payment_pending';
   const isDispatched = order.status === 'dispatched';
 
-  // Detección de bebida para estilizado
+  // Detección de bebida oficial
   const isMalta = order.beverage.toLowerCase().includes('malta');
   const isPepsi = order.beverage.toLowerCase().includes('pepsi');
 
@@ -28,7 +28,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
     <div
       className={`rounded-2xl transition-all duration-200 select-none ${
         isKitchen
-          ? 'bg-slate-900 border-2 border-orange-500/90 shadow-[0_0_20px_rgba(249,115,22,0.22)] p-4 sm:p-5'
+          ? 'bg-slate-900 border-2 border-orange-500/90 shadow-[0_0_24px_rgba(249,115,22,0.25)] p-4 sm:p-5'
           : isStandby
           ? 'bg-slate-900/90 border border-sky-500/40 hover:border-sky-400 p-4'
           : isPaymentPending
@@ -85,11 +85,22 @@ export const OrderCard: React.FC<OrderCardProps> = ({
         </div>
       </div>
 
+      {/* COMPOSICIÓN BASE OFICIAL DE LOS 2 PERROS */}
+      <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-2.5 mb-3">
+        <div className="flex items-center gap-1.5 text-[11px] font-black text-yellow-400/90 uppercase tracking-wide mb-1">
+          <span>🌭</span>
+          <span>BASE (2 PERROS SIFRINA):</span>
+        </div>
+        <div className="text-xs text-slate-300 font-medium leading-relaxed">
+          {order.baseRecipe || SIFRINA_BASE_RECIPE}
+        </div>
+      </div>
+
       {/* DETALLES DE COCINA: SETBOX (2 POTES SELLADOS) */}
       {isKitchen ? (
         <div className="space-y-3.5 my-3">
           {/* Contenedor del SETBOX */}
-          <div className="bg-slate-950/90 border-2 border-yellow-400/80 rounded-xl p-3.5 shadow-inner">
+          <div className="bg-slate-950/90 border-2 border-yellow-400/90 rounded-xl p-3.5 shadow-inner">
             <div className="flex items-center justify-between pb-2 mb-2.5 border-b border-yellow-400/30">
               <div className="flex items-center gap-2">
                 <span className="text-xl">📦</span>
@@ -98,37 +109,37 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                 </span>
               </div>
               <span className="bg-yellow-400 text-slate-950 font-black text-xs px-2 py-0.5 rounded-md">
-                REGLA TÉRMICA
+                RECETA OFICIAL
               </span>
             </div>
 
             {/* Toppings seleccionados */}
             <div className="text-xs font-bold text-slate-400 mb-1.5 uppercase tracking-wider">
-              Toppings / Rellenos en Potes:
+              Toppings Autorizados en Potes:
             </div>
             {order.toppings && order.toppings.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                 {order.toppings.map((topping, idx) => (
                   <div
                     key={idx}
-                    className="flex items-center gap-2 bg-slate-900 border border-slate-700/80 rounded-lg px-2.5 py-1.5"
+                    className="flex items-center gap-2 bg-slate-900 border border-yellow-400/40 rounded-lg px-2.5 py-2 shadow-sm"
                   >
-                    <span className="h-2 w-2 rounded-full bg-yellow-400"></span>
-                    <span className="text-xs sm:text-sm font-semibold text-slate-200 truncate">
+                    <span className="h-2 w-2 rounded-full bg-yellow-400 flex-shrink-0"></span>
+                    <span className="text-xs sm:text-sm font-bold text-yellow-100 truncate">
                       {topping}
                     </span>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-sm italic text-slate-500">Combo estándar sin toppings extra</div>
+              <div className="text-sm italic text-slate-500">Combo base sin potes adicionales</div>
             )}
           </div>
 
-          {/* Bebida Seleccionada */}
+          {/* Bebida Seleccionada (Malta Polar o Pepsi) */}
           <div className="flex items-center justify-between bg-slate-950/70 border border-slate-800 rounded-xl px-3.5 py-2">
             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
-              Bebida Fría:
+              Bebida Oficial:
             </span>
             <div
               className={`flex items-center gap-1.5 font-bold text-sm px-2.5 py-1 rounded-lg ${
@@ -139,7 +150,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
                   : 'bg-slate-800 text-slate-200'
               }`}
             >
-              <span>{isMalta ? '🍺' : isPepsi ? '🥤' : '🥤'}</span>
+              <span>{isMalta ? '🍺' : '🥤'}</span>
               <span>{order.beverage}</span>
             </div>
           </div>
@@ -178,7 +189,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
               {order.toppings.map((top, i) => (
                 <span
                   key={i}
-                  className="text-xs bg-slate-800 text-slate-300 px-2 py-0.5 rounded-md font-medium"
+                  className="text-xs bg-slate-800 text-yellow-300 border border-yellow-400/20 px-2 py-0.5 rounded-md font-bold"
                 >
                   {top}
                 </span>
@@ -194,7 +205,7 @@ export const OrderCard: React.FC<OrderCardProps> = ({
 
           {/* Modificaciones */}
           {order.modificaciones && order.modificaciones !== 'Ninguna' && (
-            <div className="text-xs bg-slate-800/80 border border-slate-700 rounded-md p-1.5 text-amber-300 font-medium">
+            <div className="text-xs bg-red-950/40 border border-red-500/40 rounded-md p-1.5 text-red-300 font-bold">
               Nota: {order.modificaciones}
             </div>
           )}

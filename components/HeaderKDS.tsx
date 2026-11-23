@@ -8,12 +8,14 @@ import { Order } from '@/types/order';
 interface HeaderKDSProps {
   orders: Order[];
   onOpenSimulateModal: () => void;
+  onClearScreen: () => void;
   isPolling: boolean;
 }
 
 export const HeaderKDS: React.FC<HeaderKDSProps> = ({
   orders,
   onOpenSimulateModal,
+  onClearScreen,
   isPolling,
 }) => {
   const [caracasTime, setCaracasTime] = useState({
@@ -70,12 +72,12 @@ export const HeaderKDS: React.FC<HeaderKDSProps> = ({
   const dispatchedCount = orders.filter((o) => o.status === 'dispatched').length;
 
   return (
-    <header className="bg-slate-950/95 border-b border-slate-800/80 px-4 sm:px-6 py-3 select-none backdrop-blur-md sticky top-0 z-40">
+    <header className="bg-slate-950/95 border-b border-slate-800/80 px-4 sm:px-6 py-2.5 select-none backdrop-blur-md sticky top-0 z-40">
       <div className="flex flex-col lg:flex-row items-center justify-between gap-3">
         {/* Marca Sifrina CCS & Título KDS */}
         <div className="flex items-center gap-3 sm:gap-4 w-full lg:w-auto justify-between lg:justify-start">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 sm:h-12 sm:w-12 rounded-xl bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center font-black text-slate-950 text-xl sm:text-2xl shadow-lg shadow-yellow-500/20 ring-2 ring-yellow-400/50">
+            <div className="h-10 w-10 sm:h-11 sm:w-11 rounded-xl bg-gradient-to-br from-yellow-400 to-yellow-500 flex items-center justify-center font-black text-slate-950 text-xl sm:text-2xl shadow-lg shadow-yellow-500/20 ring-2 ring-yellow-400/50">
               S
             </div>
             <div>
@@ -89,7 +91,7 @@ export const HeaderKDS: React.FC<HeaderKDSProps> = ({
                 </span>
               </div>
               <p className="text-xs text-slate-400 font-medium">
-                Pantalla de Operaciones 55&quot; | Caracas, Venezuela
+                Pantalla de Cocina 55&quot; | Caracas, Venezuela
               </p>
             </div>
           </div>
@@ -102,7 +104,7 @@ export const HeaderKDS: React.FC<HeaderKDSProps> = ({
         </div>
 
         {/* Reloj en Vivo Caracas GMT-4 (Destacado para TV a 3 metros) */}
-        <div className="flex items-center gap-3 bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-2 shadow-inner">
+        <div className="flex items-center gap-3 bg-slate-900 border border-slate-700/80 rounded-xl px-4 py-1.5 shadow-inner">
           <div className="text-center">
             <div className="font-mono text-2xl sm:text-3xl font-black text-yellow-400 tracking-wider">
               {caracasTime.time}
@@ -116,7 +118,7 @@ export const HeaderKDS: React.FC<HeaderKDSProps> = ({
         {/* Resumen de Métricas */}
         <div className="hidden xl:flex items-center gap-2 font-mono text-xs">
           <div className="bg-slate-900/90 border border-sky-500/30 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
-            <span className="text-sky-400 font-bold">1. Chat:</span>
+            <span className="text-sky-400 font-bold">1. Radar:</span>
             <span className="font-black text-white">{standbyCount}</span>
           </div>
           <div className="bg-slate-900/90 border border-amber-500/30 px-3 py-1.5 rounded-lg flex items-center gap-1.5">
@@ -133,12 +135,22 @@ export const HeaderKDS: React.FC<HeaderKDSProps> = ({
           </div>
         </div>
 
-        {/* Botones de Control (Audio, Pantalla Completa, Simular) */}
+        {/* Botones de Control */}
         <div className="flex items-center gap-2 w-full lg:w-auto justify-end">
+          {/* Botón Discreto: Limpiar Pantalla */}
+          <button
+            onClick={onClearScreen}
+            className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-slate-900 border border-slate-700/80 hover:border-red-500/60 text-slate-400 hover:text-red-400 transition-colors flex items-center gap-1 cursor-pointer"
+            title="Limpiar todas las órdenes al terminar el turno de cocina"
+          >
+            <span>🧹</span>
+            <span className="hidden sm:inline">Limpiar Pantalla</span>
+          </button>
+
           {/* Botón de Audio / Campana */}
           <button
             onClick={handleToggleAudio}
-            className={`px-3 py-2 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
+            className={`px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-1.5 transition-all cursor-pointer border ${
               isAudioEnabled
                 ? 'bg-yellow-400/15 border-yellow-400 text-yellow-300 hover:bg-yellow-400/25'
                 : 'bg-slate-900 border-slate-700 text-slate-300 hover:border-yellow-400 hover:text-yellow-400'
@@ -151,8 +163,8 @@ export const HeaderKDS: React.FC<HeaderKDSProps> = ({
           {/* Botón Simular n8n */}
           <button
             onClick={onOpenSimulateModal}
-            className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
-            title="Probar webhook de n8n o inyectar orden de demostración"
+            className="px-3 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
+            title="Inyectar orden con receta oficial de Sifrina"
           >
             <span>⚡ Simular n8n</span>
           </button>
@@ -160,20 +172,20 @@ export const HeaderKDS: React.FC<HeaderKDSProps> = ({
           {/* Botón Pantalla Completa */}
           <button
             onClick={handleToggleFullscreen}
-            className="px-3 py-2 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
+            className="px-2.5 py-1.5 rounded-xl text-xs sm:text-sm font-bold bg-slate-900 border border-slate-700 hover:border-slate-500 text-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
             title="Pantalla completa para TV de 55 pulgadas"
           >
-            <span>{isFullscreen ? '🗗 Salir' : '🖥️ TV 55"'}</span>
+            <span>{isFullscreen ? '🗗' : '🖥️ TV'}</span>
           </button>
 
           {/* Estado de sincronización en vivo */}
-          <div className="hidden lg:flex items-center gap-1.5 text-xs font-mono text-emerald-400 bg-emerald-950/40 px-3 py-2 rounded-xl border border-emerald-500/30">
+          <div className="hidden lg:flex items-center gap-1.5 text-xs font-mono text-emerald-400 bg-emerald-950/40 px-2.5 py-1.5 rounded-xl border border-emerald-500/30">
             <span
               className={`h-2.5 w-2.5 rounded-full bg-emerald-400 ${
                 isPolling ? 'animate-ping' : ''
               }`}
             ></span>
-            <span className="font-bold">SYNC 3s</span>
+            <span className="font-bold">SYNC 2s</span>
           </div>
         </div>
       </div>

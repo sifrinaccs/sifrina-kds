@@ -1,16 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getOrders, upsertOrder, updateOrderStatus, resetOrdersStore } from '@/lib/store';
-import { Order, OrderStatus } from '@/types/order';
+import {
+  getOrders,
+  upsertOrder,
+  updateOrderStatus,
+  clearOrdersStore,
+  resetOrdersStore,
+} from '@/lib/store';
+import { Order, OrderStatus, SIFRINA_BASE_RECIPE } from '@/types/order';
 
 export const dynamic = 'force-dynamic';
 export const revalidate = 0;
 
 const SIFRINA_SECRET = process.env.KDS_SECRET || 'SifrinaKDSSecure2026';
 
-// Headers CORS para integración externa con n8n
+// Headers CORS para sincronización externa con n8n
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Methods': 'GET, POST, PATCH, OPTIONS',
+  'Access-Control-Allow-Methods': 'GET, POST, PATCH, DELETE, OPTIONS',
   'Access-Control-Allow-Headers': 'Content-Type, Authorization, x-sifrina-secret',
 };
 
@@ -20,7 +26,7 @@ export async function OPTIONS() {
 
 /**
  * GET /api/orders
- * Retorna la lista de todas las órdenes activas ordenadas cronológicamente
+ * Retorna las órdenes activas ordenadas cronológicamente para la pantalla KDS
  */
 export async function GET(request: NextRequest) {
   try {
@@ -51,18 +57,19 @@ export async function GET(request: NextRequest) {
 
 /**
  * POST /api/orders
- * Recibe una orden desde n8n
- * Valida cabecera: x-sifrina-secret: SifrinaKDSSecure2026
+ * Recibe una orden en tiempo real desde n8n
+ * Valida la cabecera de seguridad: x-sifrina-secret: SifrinaKDSSecure2026
  */
 export async function POST(request: NextRequest) {
   try {
     const secretHeader = request.headers.get('x-sifrina-secret');
 
+    // Validación de seguridad estricta
     if (!secretHeader || secretHeader !== SIFRINA_SECRET) {
       return NextResponse.json(
         {
           success: false,
-          error: 'Acceso no autorizado. Cabecera x-sifrina-secret inválida o ausente.',
+          error: 'Acceso no autorizado. La cabecera x-sifrina-secret es requerida y debe coincidir.',
         },
         { status: 401, headers: corsHeaders }
       );
@@ -70,11 +77,20 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
 
-    // Soporte para reset/demo si n8n envía action: "reset"
+    // Soporte para acción de limpieza ("Limpiar Pantalla")
+    if (body.action === 'clear') {
+      const clearedList = clearOrdersStore();
+      return NextResponse.json(
+        { success: true, message: 'Tablero KDS vaciado correctamente', orders: clearedList },
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
+    // Soporte para restablecer pedido de prueba oficial
     if (body.action === 'reset') {
       const resetList = resetOrdersStore();
       return NextResponse.json(
-        { success: true, message: 'KDS reiniciado con órdenes de prueba', orders: resetList },
+        { success: true, message: 'Tablero KDS restablecido con pedido oficial', orders: resetList },
         { status: 200, headers: corsHeaders }
       );
     }
@@ -83,12 +99,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error: 'El campo "id" es requerido y debe ser un string (ej. "#SIF-7291")',
+          error: 'El campo "id" es requerido (ej. "#SIF-7291")',
         },
         { status: 400, headers: corsHeaders }
       );
     }
 
+    // Mapeo riguroso de estados para las 4 columnas
     const validStatuses: OrderStatus[] = ['standby', 'payment_pending', 'kitchen', 'dispatched'];
     const status: OrderStatus = validStatuses.includes(body.status) ? body.status : 'standby';
 
@@ -96,29 +113,30 @@ export async function POST(request: NextRequest) {
       id: body.id,
       customerName: body.customerName || 'Cliente WhatsApp',
       status,
-      toppings: Array.isArray(body.toppings) ? body.toppings : [],
-      beverage: body.beverage || 'Sin bebida',
+      toppings: Array.isArray(body.toppings) ? body.toppings : ['Reina Pepiada', 'Chuleta glaseada con papelón'],
+      beverage: body.beverage || 'Malta Polar 355ml',
       modificaciones: body.modificaciones || 'Ninguna',
       totalBs: body.totalBs || 'Bs 0.00',
       totalUsd: body.totalUsd || '$0.00',
       deliveryZone: body.deliveryZone || 'Caracas',
       createdAt: body.createdAt ? Number(body.createdAt) : Date.now(),
+      baseRecipe: body.baseRecipe || SIFRINA_BASE_RECIPE,
     };
 
     const savedOrder = upsertOrder(orderToSave);
 
-    console.log(`[KDS API] Orden procesada con éxito: ${savedOrder.id} [${savedOrder.status}]`);
+    console.log(`[KDS n8n] Pedido inyectado: ${savedOrder.id} (${savedOrder.customerName}) ➔ Columna: [${savedOrder.status}]`);
 
     return NextResponse.json(
       {
         success: true,
-        message: 'Orden guardada y proyectada en pantalla con éxito',
+        message: 'Orden proyectada en tiempo real en la pantalla del KDS',
         order: savedOrder,
       },
       { status: 200, headers: corsHeaders }
     );
   } catch (error) {
-    console.error('[KDS API] Error al procesar orden de n8n:', error);
+    console.error('[KDS API] Error al procesar payload de n8n:', error);
     return NextResponse.json(
       { success: false, error: 'Formato de payload inválido o error en la petición' },
       { status: 400, headers: corsHeaders }
@@ -128,8 +146,7 @@ export async function POST(request: NextRequest) {
 
 /**
  * PATCH /api/orders
- * Permite cambiar el estado de una orden desde el botón táctil de la pantalla
- * o desde webhook n8n
+ * Permite cambiar el estado de la comanda desde el botón táctil de cocina
  */
 export async function PATCH(request: NextRequest) {
   try {
@@ -147,7 +164,7 @@ export async function PATCH(request: NextRequest) {
 
     if (!updated) {
       return NextResponse.json(
-        { success: false, error: `Orden ${id} no encontrada en el sistema` },
+        { success: false, error: `Orden ${id} no encontrada` },
         { status: 404, headers: corsHeaders }
       );
     }
@@ -161,10 +178,22 @@ export async function PATCH(request: NextRequest) {
       { status: 200, headers: corsHeaders }
     );
   } catch (error) {
-    console.error('[KDS API] Error al actualizar estado de orden:', error);
+    console.error('[KDS API] Error al actualizar orden:', error);
     return NextResponse.json(
-      { success: false, error: 'Error al actualizar orden' },
+      { success: false, error: 'Error al actualizar comanda' },
       { status: 500, headers: corsHeaders }
     );
   }
+}
+
+/**
+ * DELETE /api/orders
+ * Vence y limpia el tablero al terminar el turno
+ */
+export async function DELETE() {
+  clearOrdersStore();
+  return NextResponse.json(
+    { success: true, message: 'Tablero KDS limpiado con éxito' },
+    { status: 200, headers: corsHeaders }
+  );
 }

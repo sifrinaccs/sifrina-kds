@@ -7,7 +7,7 @@ import { KanbanBoard } from '@/components/KanbanBoard';
 import { SimulateOrderModal } from '@/components/SimulateOrderModal';
 import { kitchenAudio } from '@/lib/audio';
 
-const POLLING_INTERVAL_MS = 3000; // Sondeo cada 3 segundos
+const POLLING_INTERVAL_MS = 2000; // Sondeo rápido cada 2 segundos para tiempo real
 
 export default function SifrinaKDSPage() {
   const [orders, setOrders] = useState<Order[]>([]);
@@ -16,11 +16,11 @@ export default function SifrinaKDSPage() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [isSimulateModalOpen, setIsSimulateModalOpen] = useState(false);
 
-  // Mantener registro de órdenes previas en "kitchen" para detectar nuevas y sonar la campana
+  // Mantener registro de órdenes previas en "kitchen" para sonar la campana de inmediato
   const prevKitchenOrderIdsRef = useRef<Set<string>>(new Set());
   const isFirstLoadRef = useRef(true);
 
-  // Consulta al backend /api/orders
+  // Consulta al endpoint /api/orders
   const fetchOrders = useCallback(async () => {
     try {
       setIsPollingTick(true);
@@ -45,7 +45,7 @@ export default function SifrinaKDSPage() {
         );
 
         if (!isFirstLoadRef.current) {
-          // Detectar si alguna orden nueva entró a kitchen
+          // Detectar si alguna orden nueva entró a cocina
           let hasNewKitchenOrder = false;
           currentKitchenIds.forEach((id) => {
             if (!prevKitchenOrderIdsRef.current.has(id)) {
@@ -54,7 +54,7 @@ export default function SifrinaKDSPage() {
           });
 
           if (hasNewKitchenOrder) {
-            console.log('[KDS] ¡Nueva orden en cocina! Sonando campana...');
+            console.log('[KDS] ¡Nueva orden en cocina de Sifrina! Sonando campana...');
             kitchenAudio.playKitchenBell();
           }
         } else {
@@ -72,18 +72,18 @@ export default function SifrinaKDSPage() {
     }
   }, []);
 
-  // Polling recurrente cada 3 segundos
+  // Polling recurrente cada 2 segundos
   useEffect(() => {
     fetchOrders();
     const interval = setInterval(fetchOrders, POLLING_INTERVAL_MS);
     return () => clearInterval(interval);
   }, [fetchOrders]);
 
-  // Manejador para actualizar el estado de una orden (ej. "MARCAR LISTO / EMPACADO ✔")
+  // Actualizar estado de comanda (ej. "MARCAR LISTO / EMPACADO ✔")
   const handleUpdateStatus = async (orderId: string, newStatus: OrderStatus) => {
     setUpdatingId(orderId);
 
-    // Actualización optimista inmediata en la UI para cero retraso táctil
+    // Actualización optimista inmediata en pantalla (0ms lag)
     setOrders((current) =>
       current.map((order) => {
         if (order.id === orderId) {
@@ -97,7 +97,6 @@ export default function SifrinaKDSPage() {
       })
     );
 
-    // Si pasa a cocina mediante la UI, reproducir campana
     if (newStatus === 'kitchen') {
       kitchenAudio.playKitchenBell();
     }
@@ -113,7 +112,6 @@ export default function SifrinaKDSPage() {
 
       if (!res.ok) {
         console.error('[KDS] Error al actualizar estado en servidor');
-        // Revertir consultando la verdad del servidor
         fetchOrders();
       }
     } catch (error) {
@@ -121,6 +119,25 @@ export default function SifrinaKDSPage() {
       fetchOrders();
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  // Limpiar pantalla al finalizar turno de cocina
+  const handleClearScreen = async () => {
+    const confirmed = window.confirm('¿Deseas limpiar todas las órdenes del tablero para cerrar el turno de cocina?');
+    if (!confirmed) return;
+
+    // Limpieza optimista inmediata
+    setOrders([]);
+    prevKitchenOrderIdsRef.current.clear();
+
+    try {
+      await fetch('/api/orders', {
+        method: 'DELETE',
+      });
+    } catch (error) {
+      console.error('[KDS] Error al limpiar pantalla:', error);
+      fetchOrders();
     }
   };
 
@@ -132,10 +149,11 @@ export default function SifrinaKDSPage() {
         kitchenAudio.unlock();
       }}
     >
-      {/* Barra Superior con Logo, Reloj Caracas GMT-4 y Métricas */}
+      {/* Barra Superior con Logo, Reloj Caracas GMT-4 y Botón Limpiar Pantalla */}
       <HeaderKDS
         orders={orders}
         onOpenSimulateModal={() => setIsSimulateModalOpen(true)}
+        onClearScreen={handleClearScreen}
         isPolling={isPollingTick}
       />
 
@@ -148,7 +166,7 @@ export default function SifrinaKDSPage() {
           <p className="font-mono text-lg font-bold text-yellow-400">
             Conectando con Dark Kitchen Sifrina CCS...
           </p>
-          <p className="text-xs text-slate-500 mt-1">Cargando línea de vapor y comandas</p>
+          <p className="text-xs text-slate-500 mt-1">Sincronizando comanda oficial en tiempo real</p>
         </div>
       ) : (
         <KanbanBoard
@@ -158,7 +176,7 @@ export default function SifrinaKDSPage() {
         />
       )}
 
-      {/* Modal interactivo para simular pedidos desde n8n */}
+      {/* Modal para pruebas con receta oficial de Sifrina */}
       <SimulateOrderModal
         isOpen={isSimulateModalOpen}
         onClose={() => setIsSimulateModalOpen(false)}
