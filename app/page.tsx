@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 
 interface Order {
   id: string;
@@ -17,9 +17,36 @@ interface Order {
   createdAt: number;
 }
 
+// 1. Posiciones sutiles para Pixel Shift silencioso continuo (cada 2 minutos)
+const SHIFT_POSITIONS = [
+  { x: 0, y: 0 },
+  { x: 2, y: 1 },
+  { x: -2, y: 2 },
+  { x: 1, y: -2 },
+];
+
+// 3. Posiciones rotativas para el salvapantallas en modo descanso
+const SCREENSAVER_POSITIONS = [
+  { top: "20%", left: "15%" },
+  { top: "65%", left: "55%" },
+  { top: "25%", left: "60%" },
+  { top: "70%", left: "20%" },
+  { top: "45%", left: "40%" },
+  { top: "15%", left: "50%" },
+  { top: "60%", left: "35%" },
+];
+
 export default function IndustrialKDS() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [currentTime, setCurrentTime] = useState("");
+
+  // Estados de protección anti-quemado de pantalla
+  const [shiftIndex, setShiftIndex] = useState(0);
+  const [isSweeping, setIsSweeping] = useState(false);
+  const [isSleepMode, setIsSleepMode] = useState(false);
+  const [sleepPosIndex, setSleepPosIndex] = useState(0);
+
+  const emptyStartTimeRef = useRef<number | null>(null);
 
   // Reloj oficial de Caracas (VET)
   useEffect(() => {
@@ -57,19 +84,97 @@ export default function IndustrialKDS() {
     return () => clearInterval(interval);
   }, []);
 
-  // 4. FIX DEFINITIVO PARA "NaN:NaN": Conversión robusta a milisegundos y prevención de negativos
+  // 1. PIXEL SHIFT SILENCIOSO: Rota offset cada 2 minutos entre 4 posiciones sutiles
+  useEffect(() => {
+    const shiftInterval = setInterval(() => {
+      setShiftIndex((prev) => (prev + 1) % SHIFT_POSITIONS.length);
+    }, 2 * 60 * 1000); // 2 minutos
+    return () => clearInterval(shiftInterval);
+  }, []);
+
+  // 2. BARRIDO DE REFRESCAMIENTO DE LEDs: Disparador manual y automático cada 30 minutos
+  const triggerSweep = useCallback(() => {
+    setIsSweeping(true);
+    setTimeout(() => {
+      setIsSweeping(false);
+    }, 2500); // 2.5 segundos exactos
+  }, []);
+
+  useEffect(() => {
+    const sweepInterval = setInterval(() => {
+      triggerSweep();
+    }, 30 * 60 * 1000); // Cada 30 minutos
+    return () => clearInterval(sweepInterval);
+  }, [triggerSweep]);
+
+  // 3. SALVAPANTALLAS POR INACTIVIDAD: Si orders.length === 0 por más de 15 minutos
+  useEffect(() => {
+    if (orders.length > 0) {
+      emptyStartTimeRef.current = null;
+      setIsSleepMode(false);
+      return;
+    }
+
+    if (emptyStartTimeRef.current === null) {
+      emptyStartTimeRef.current = Date.now();
+    }
+
+    const sleepCheckInterval = setInterval(() => {
+      if (
+        emptyStartTimeRef.current !== null &&
+        Date.now() - emptyStartTimeRef.current >= 15 * 60 * 1000
+      ) {
+        setIsSleepMode(true);
+      }
+    }, 5000);
+
+    return () => clearInterval(sleepCheckInterval);
+  }, [orders.length]);
+
+  // Rotar suavemente la posición del salvapantallas cada 10 segundos
+  useEffect(() => {
+    if (!isSleepMode) return;
+    const posInterval = setInterval(() => {
+      setSleepPosIndex((prev) => (prev + 1) % SCREENSAVER_POSITIONS.length);
+    }, 10 * 1000);
+    return () => clearInterval(posInterval);
+  }, [isSleepMode]);
+
+  // Desactivar modo descanso ante cualquier interacción física o digital
+  useEffect(() => {
+    const handleUserActivity = () => {
+      if (orders.length === 0) {
+        emptyStartTimeRef.current = Date.now();
+      }
+      setIsSleepMode(false);
+    };
+
+    window.addEventListener("mousemove", handleUserActivity);
+    window.addEventListener("mousedown", handleUserActivity);
+    window.addEventListener("touchstart", handleUserActivity);
+    window.addEventListener("keydown", handleUserActivity);
+
+    return () => {
+      window.removeEventListener("mousemove", handleUserActivity);
+      window.removeEventListener("mousedown", handleUserActivity);
+      window.removeEventListener("touchstart", handleUserActivity);
+      window.removeEventListener("keydown", handleUserActivity);
+    };
+  }, [orders.length]);
+
+  // Conversión robusta a milisegundos y prevención de negativos ("NaN:NaN" fix)
   const getElapsedTime = (timestamp: number | string | undefined | null) => {
     if (!timestamp) return "00:00";
     let ts = typeof timestamp === "number" ? timestamp : Date.parse(String(timestamp));
     if (!ts || isNaN(ts) || ts <= 0) return "00:00";
-    if (ts < 10000000000) ts *= 1000; // Normalizar si viene en segundos
+    if (ts < 10000000000) ts *= 1000;
     const diff = Math.max(0, Math.floor((Date.now() - ts) / 1000));
     const mins = Math.floor(diff / 60);
     const secs = diff % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  // 3. DESPACHO AL BACKEND (CERO CORS): El navegador solo invoca /api/orders
+  // Despacho al backend (cero CORS): El navegador solo invoca /api/orders
   const markAsDispatched = async (orderId: string) => {
     try {
       await fetch("/api/orders", {
@@ -88,7 +193,7 @@ export default function IndustrialKDS() {
     }
   };
 
-  // 2. PURGA REAL DE SERVIDOR: Vacía en el backend y limpia la pantalla sin revivir datos
+  // Purga real de servidor: Vacía en el backend y limpia la pantalla sin revivir datos
   const clearAll = async () => {
     if (confirm("¿Limpiar órdenes en pantalla?")) {
       try {
@@ -99,6 +204,7 @@ export default function IndustrialKDS() {
           },
         });
         setOrders([]);
+        emptyStartTimeRef.current = Date.now();
       } catch (err) {
         console.error("Error al purgar KDS:", err);
       }
@@ -106,17 +212,78 @@ export default function IndustrialKDS() {
   };
 
   return (
-    <div className="h-screen w-screen bg-black text-neutral-200 font-mono flex flex-col overflow-hidden select-none text-xs">
+    <div className="h-screen w-screen bg-black text-neutral-200 font-mono flex flex-col overflow-hidden select-none text-xs relative">
+      
+      {/* 2. OVERLAY DE BARRIDO DE REFRESCAMIENTO DE LEDs (2.5 SEGUNDOS) */}
+      {isSweeping && (
+        <div className="fixed inset-0 z-50 pointer-events-none overflow-hidden bg-black/60">
+          <div
+            className="absolute top-0 bottom-0 w-[140%]"
+            style={{
+              background:
+                "linear-gradient(90deg, transparent 0%, #FFFFFF 12%, #000000 24%, #FF0000 38%, #00FF00 52%, #0000FF 66%, #FFFFFF 80%, #000000 92%, transparent 100%)",
+              animation: "ledSweepAnimation 2.5s linear forwards",
+            }}
+          />
+          <style>{`
+            @keyframes ledSweepAnimation {
+              0% { transform: translateX(-100%); }
+              100% { transform: translateX(100%); }
+            }
+          `}</style>
+        </div>
+      )}
+
+      {/* 3. SALVAPANTALLAS POR INACTIVIDAD (MODO DESCANSO > 15 MIN SIN ÓRDENES) */}
+      {isSleepMode && (
+        <div
+          onClick={() => {
+            if (orders.length === 0) emptyStartTimeRef.current = Date.now();
+            setIsSleepMode(false);
+          }}
+          className="fixed inset-0 z-40 bg-black cursor-pointer select-none"
+        >
+          <div
+            className="absolute p-4 rounded-xl border-2 border-yellow-500/80 bg-neutral-950/95 shadow-[0_0_30px_rgba(234,179,8,0.35)]"
+            style={{
+              top: SCREENSAVER_POSITIONS[sleepPosIndex].top,
+              left: SCREENSAVER_POSITIONS[sleepPosIndex].left,
+              transition: "top 2s ease-in-out, left 2s ease-in-out",
+            }}
+          >
+            <div className="flex items-center gap-2">
+              <span className="h-2.5 w-2.5 rounded-full bg-yellow-400 animate-ping"></span>
+              <span className="text-yellow-400 font-mono font-black text-sm sm:text-base tracking-widest uppercase">
+                SIFRINA CCS - EN ESPERA
+              </span>
+            </div>
+            <div className="text-[10px] text-neutral-400 font-mono mt-1 text-center">
+              [TOCA LA PANTALLA PARA ACTIVAR TABLERO]
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* HEADER COMPACTO INDUSTRIAL (34px) */}
-      <header className="h-9 bg-neutral-900 border-b border-neutral-700 px-3 flex justify-between items-center text-xs">
+      <header className="h-9 bg-neutral-900 border-b border-neutral-700 px-3 flex justify-between items-center text-xs z-10">
         <div className="flex items-center gap-2">
           <span className="bg-yellow-500 text-black font-black px-1.5 py-0.5 rounded text-[11px] tracking-wider">
             SIFRINA
           </span>
           <span className="text-neutral-400 font-bold hidden sm:inline">KDS COCINA [32&quot; HD]</span>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2.5 sm:gap-4">
           <div className="text-yellow-400 font-mono font-bold text-sm tracking-widest">{currentTime} VET</div>
+          
+          {/* Botón Discreto de Barrido Manual */}
+          <button 
+            onClick={triggerSweep} 
+            className="border border-neutral-700 hover:bg-neutral-800 text-neutral-400 hover:text-neutral-200 px-2 py-0.5 rounded text-[10px] cursor-pointer transition-colors"
+            title="Refrescamiento manual de LEDs (2.5s) para evitar retención de imagen"
+          >
+            [BARRIDO]
+          </button>
+
           <button 
             onClick={clearAll} 
             className="border border-neutral-700 hover:bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded text-[10px] cursor-pointer"
@@ -126,8 +293,14 @@ export default function IndustrialKDS() {
         </div>
       </header>
 
-      {/* 4 COLUMNAS PARALELAS FIJAS EN 720P (1366x768) */}
-      <main className="flex-1 grid grid-cols-4 gap-1.5 p-1.5 h-[calc(100vh-36px)]">
+      {/* 4 COLUMNAS PARALELAS FIJAS EN 720P (1366x768) + 1. PIXEL SHIFT SILENCIOSO */}
+      <main 
+        className="flex-1 grid grid-cols-4 gap-1.5 p-1.5 h-[calc(100vh-36px)]"
+        style={{
+          transform: `translate(${SHIFT_POSITIONS[shiftIndex].x}px, ${SHIFT_POSITIONS[shiftIndex].y}px)`,
+          transition: "transform 1s ease-in-out",
+        }}
+      >
         
         {/* COL 1: RADAR / CHAT */}
         <section className="bg-neutral-950 border border-neutral-800 flex flex-col rounded overflow-hidden">
