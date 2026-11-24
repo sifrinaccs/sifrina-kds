@@ -21,7 +21,7 @@ export default function IndustrialKDS() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [currentTime, setCurrentTime] = useState("");
 
-  // Reloj oficial de Caracas
+  // Reloj oficial de Caracas (VET)
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -36,7 +36,10 @@ export default function IndustrialKDS() {
   useEffect(() => {
     const fetchOrders = async () => {
       try {
-        const res = await fetch("/api/orders");
+        const res = await fetch("/api/orders", {
+          cache: "no-store",
+          headers: { "Cache-Control": "no-cache" },
+        });
         if (res.ok) {
           const data = await res.json();
           if (Array.isArray(data)) {
@@ -46,7 +49,7 @@ export default function IndustrialKDS() {
           }
         }
       } catch (err) {
-        console.error("Error sincronizando KDS", err);
+        console.error("Error sincronizando KDS:", err);
       }
     };
     fetchOrders();
@@ -54,54 +57,50 @@ export default function IndustrialKDS() {
     return () => clearInterval(interval);
   }, []);
 
-  const getElapsedTime = (timestamp: number) => {
-    const diff = Math.floor((Date.now() - timestamp) / 1000);
+  // 4. FIX DEFINITIVO PARA "NaN:NaN": Conversión robusta a milisegundos y prevención de negativos
+  const getElapsedTime = (timestamp: number | string | undefined | null) => {
+    if (!timestamp) return "00:00";
+    let ts = typeof timestamp === "number" ? timestamp : Date.parse(String(timestamp));
+    if (!ts || isNaN(ts) || ts <= 0) return "00:00";
+    if (ts < 10000000000) ts *= 1000; // Normalizar si viene en segundos
+    const diff = Math.max(0, Math.floor((Date.now() - ts) / 1000));
     const mins = Math.floor(diff / 60);
     const secs = diff % 60;
     return `${mins.toString().padStart(2, "0")}:${secs.toString().padStart(2, "0")}`;
   };
 
-  const markAsDispatched = async (order: Order) => {
+  // 3. DESPACHO AL BACKEND (CERO CORS): El navegador solo invoca /api/orders
+  const markAsDispatched = async (orderId: string) => {
     try {
-      // 1. Mueve la orden a Columna 4 en Vercel
       await fetch("/api/orders", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "x-sifrina-secret": "SifrinaKDSSecure2026",
         },
-        body: JSON.stringify({ id: order.id, status: "dispatched" }),
+        body: JSON.stringify({ id: orderId, status: "dispatched" }),
       });
-
-      // 2. Le avisa a n8n para que mande el WhatsApp al cliente
-      await fetch("https://devsifrinaccs.app.n8n.cloud/webhook/kds-despachado", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          id: order.id,
-          phone: order.phone,
-          customerName: order.customerName,
-        }),
-      });
-
-      // 3. Actualiza el estado visual en el televisor
       setOrders((prev) =>
-        prev.map((o) => (o.id === order.id ? { ...o, status: "dispatched" } : o))
+        prev.map((o) => (o.id === orderId ? { ...o, status: "dispatched" } : o))
       );
     } catch (err) {
       console.error("Error al despachar orden:", err);
     }
   };
 
+  // 2. PURGA REAL DE SERVIDOR: Vacía en el backend y limpia la pantalla sin revivir datos
   const clearAll = async () => {
-    if (confirm("Limpiar órdenes en pantalla?")) {
-      setOrders([]);
+    if (confirm("¿Limpiar órdenes en pantalla?")) {
       try {
         await fetch("/api/orders", {
           method: "DELETE",
+          headers: {
+            "x-sifrina-secret": "SifrinaKDSSecure2026",
+          },
         });
+        setOrders([]);
       } catch (err) {
-        console.error(err);
+        console.error("Error al purgar KDS:", err);
       }
     }
   };
@@ -120,14 +119,14 @@ export default function IndustrialKDS() {
           <div className="text-yellow-400 font-mono font-bold text-sm tracking-widest">{currentTime} VET</div>
           <button 
             onClick={clearAll} 
-            className="border border-neutral-700 hover:bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded text-[10px]"
+            className="border border-neutral-700 hover:bg-neutral-800 text-neutral-400 px-2 py-0.5 rounded text-[10px] cursor-pointer"
           >
             [PURGAR]
           </button>
         </div>
       </header>
 
-      {/* 4 COLUMNAS PARALELAS FIJAS EN 720P */}
+      {/* 4 COLUMNAS PARALELAS FIJAS EN 720P (1366x768) */}
       <main className="flex-1 grid grid-cols-4 gap-1.5 p-1.5 h-[calc(100vh-36px)]">
         
         {/* COL 1: RADAR / CHAT */}
@@ -235,7 +234,7 @@ export default function IndustrialKDS() {
 
                   {/* BOTON DE ACCION PARA EL COCINERO */}
                   <button
-                    onClick={() => markAsDispatched(order)}
+                    onClick={() => markAsDispatched(order.id)}
                     className="w-full mt-2 bg-emerald-600 hover:bg-emerald-500 text-black font-black py-1.5 rounded text-xs uppercase tracking-wider transition active:scale-95 cursor-pointer"
                   >
                     [ EMPACADO / LISTO ]
